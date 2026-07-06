@@ -1,0 +1,10 @@
+# --- Aşama 1 (sinyal üretimi + entropi ölçümü, GPU gerekmez) ---
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+matplotlib>=3.8
+
+# --- Aşama 2 (forecaster eğitimi, GPU) — kurulumu README §3'e göre yap ---
+# torch  (CUDA sürümüyle birlikte; pip satırı README'de)
+# einops
+# tqdm

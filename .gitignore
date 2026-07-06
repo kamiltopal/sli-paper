@@ -1,0 +1,15 @@
+@"
+data/synthetic/*.npy
+results/*.csv
+results/*.png
+__pycache__/
+*.pyc
+.conda/
+data/real/epias/Piyasa_Takas_Fiyati-01012022-01012023.csv
+data/real/epias/Piyasa_Takas_Fiyati-01012023-01012024.csv
+data/real/epias/Piyasa_Takas_Fiyati-01012024-01012025.csv
+data/real/epias/Piyasa_Takas_Fiyati-01012025-01012026.csv
+data/real/epias/Piyasa_Takas_Fiyati-01012026-06072026.csv
+data/real/traffic/traffic.csv
+
+"@ | Out-File -FilePath .gitignore -Encoding ascii
