@@ -1,105 +1,80 @@
-# SLI — Synthetic Learnability Index: Deney Altyapısı
+# SLI — Synthetic Learnability Index: Deney Altyapısı (final)
 
-Protokol v1 (dondurulmuş) uygulaması. Bu repo, makalenin deney hattını
-aşamalı olarak inşa eder (protokol §3.6):
+Tek yazarlı makale: *When Does Synthetic Data Help Time-Series Forecasting?
+An Entropy-Conditioned, Information-Routing Account.* Bu repo, makaledeki
+tüm deneylerin üretim–eğitim–analiz hattıdır. Her koşum (seri, rejim,
+üreteç, mimari, tekrar) anahtarıyla CSV'lere eklenir ve **kaldığı yerden
+devam eder** (Ctrl-C güvenli).
 
-1. **Aşama 1 — sentetik omurga üretimi + ölçüm** (GPU gerekmez) ← şu an burası
-2. Aşama 2 — forecaster eğitim döngüsü (lokal RTX 3080)
-3. Aşama 3 — gerçek alanlar + EPİAŞ vaka çalışması (Colab)
-4. Aşama 4 — ablasyonlar / planlı genişletmeler
+## 1. Kurulum
 
----
-
-## 1. Sıfırdan ortam kurulumu (lokal makine)
-
-### 1a. Miniconda kur
-- Windows: https://docs.conda.io/en/latest/miniconda.html → 64-bit installer
-- Linux: `wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && bash Miniconda3-latest-Linux-x86_64.sh`
-
-### 1b. Ortam oluştur (Aşama 1 için yeterli)
 ```bash
-conda create -n sli python=3.11 -y
-conda activate sli
-pip install -r requirements.txt
-```
-
-### 1c. Aşama 1'i çalıştır ve kapıyı (gate) kontrol et
-```bash
-python -m scripts.validate_backbone
-```
-Beklenen çıktı sonunda:
-```
-max calibration error : < 0.02   → PASS koşulu
-Spearman rho (Ω vs perm): > 0.8  → PASS koşulu
-STAGE-1 GATE: PASS
-```
-Bu komut ayrıca şunları üretir:
-- `data/synthetic/*.npy` — 54 kalibre seri (3 Ω × 3 varyant × 6 tohum), float32
-- `results/backbone_validation.csv` — spec + ölçümler (achieved_omega,
-  pred_perm, mix_weight, concentration, calib_err)
-- `results/backbone_validation.png` — hedef-vs-ölçülen tanı grafiği
-
-> Not: Seriler tamamen (target_omega, seed, variant) üçlüsünden yeniden
-> üretilebilir; .npy dosyaları hız içindir, kaynak-of-truth spec'tir.
-
----
-
-## 2. Aşama 2 hazırlığı: GPU / PyTorch (RTX 3080)
-
-3080 için güncel CUDA 12.x tekerlekleri sorunsuz çalışır:
-```bash
-conda activate sli
+conda create -n sli python=3.11 -y && conda activate sli
+pip install -r requirements.txt                     # Aşama 1 (GPU'suz)
 pip install torch --index-url https://download.pytorch.org/whl/cu121
-pip install einops tqdm
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-```
-`True NVIDIA GeForce RTX 3080` görüyorsan hazırsın. (Sürücü eskiyse önce
-NVIDIA sürücüsünü güncelle; CUDA toolkit'i ayrıca kurmana gerek yok,
-pip tekerleği kendi runtime'ını getirir.)
-
-VRAM notu: protokoldeki forecaster'lar (DLinear, PatchTST, iTransformer,
-TimesNet) tek değişkenli 20k-nokta serilerde 10 GB'ın çok altında kalır.
-
----
-
-## 3. Gerçek veri edinme (Aşama 3'te gerekecek)
-
-| Alan | Kaynak | Not |
-|---|---|---|
-| ETT (ETTh1/h2, ETTm1/m2) | github.com/zhouhaoyi/ETDataset | CSV, doğrudan |
-| Electricity | Autoformer/Informer benchmark paketleri (github.com/thuml/Autoformer README'sindeki Google Drive bağlantısı) | standart split'lerle |
-| Weather | aynı benchmark paketi | 21 kanal, 10-dk |
-| Traffic / PEMS | aynı paket (veya Caltrans PeMS) | |
-| **EPİAŞ fiyat (vaka çalışması)** | seffaflik.epias.com.tr → Şeffaflık API (ücretsiz kayıt) | PTF saatlik; elinde zaten deneyim var |
-
-Aşama 3 script'leri bu dosyaları `data/real/<alan>/` altına bekleyecek
-şekilde yazılacak.
-
----
-
-## 4. Proje düzeni
-
-```
-sli/
-├── src/
-│   ├── measures.py      # Ω_spec (Welch, nperseg=1024 sabit) + H_perm (order=4)
-│   └── signals.py       # iki-aşamalı kalibrasyonlu Fourier üreteci
-├── scripts/
-│   └── validate_backbone.py   # Aşama-1 kapısı
-├── data/synthetic/      # üretilen omurga serileri (git'e koyma)
-├── results/             # CSV + grafikler
-└── requirements.txt
+pip install einops tqdm                             # Aşama 2+ (GPU)
+python -c "import torch; print(torch.cuda.is_available())"
 ```
 
-## 5. Tasarım kararları (makale Methods ile birebir)
+## 2. Boru hattı — çalıştırma sırası
 
-- **Ω tanımı:** 1 − normalize spektral entropi; Welch, `nperseg=1024`
-  **sabit** — ölçüm parametresi hedefe göre oynatılmaz, makalede raporlanır.
-- **İki-aşamalı kalibrasyon:** (A) çekirdek genlik-konsantrasyonu ile
-  çekirdeğin Ω'sı hedef+0.04 üstüne çıkarılır; (B) çekirdek/gürültü karışım
-  ağırlığı bisection ile hedefe oturtulur. Tolerans 0.01.
-- **İki bağımsız proxy:** Ω_spec ve H_perm; kapı koşulu sıralama tutarlılığı
-  (Spearman ρ > 0.8). Bilinen ayrışma: baskın periyot çok yavaşsa H_perm
-  lokal gürültüye duyarlıdır (örn. Ω*=0.8/regime/seed=3) — bu, mutlak değil
-  *ordinal* kullanım kararımızın gerekçesini destekler; robustness
-  bölümünde çoklu-delay H_perm ablasyonu planlıdır.
+| # | Komut | Üretir | Not |
+|---|---|---|---|
+| 1 | `python -m scripts.validate_backbone` | `data/synthetic/*.npy` (54 seri, (20000,3)), `results/backbone_validation.csv/.png` | Aşama-1 kapısı: kalibrasyon hatası <0.02, Spearman ρ>0.8. GPU gerekmez. |
+| 2 | `python -m scripts.smoke_test` | — | 3 mimarinin uçtan uca 2-epoch testi (<1 dk GPU). |
+| 3 | `python -m scripts.run_baselines` | `results/baselines.csv` (2.430 satır) | 54×3 rejim×3 mimari×5 tekrar. `--quick` = mini tur. |
+| 4 | `python -m scripts.run_augmented --arch itransformer` | `results/augmented.csv` (3.240) | 4 üreteç; havuz hücre-başına bir kez üretilir. Diğer mimariler için `--arch dlinear/patchtst` (H3 pası). |
+| 5 | `python -m scripts.compute_fidelity` | `results/fidelity.csv` (648) | Eğitim-öncesi F_probe + F_spec (keşifsel; script başındaki beyana bak). |
+| 6 | `python -m scripts.prepare_real` | `data/real/*.npy`, `results/real_domains.csv` | Ham dosyalar §3'teki düzende olmalı. |
+| 7 | `python -m scripts.run_real` | `results/real_runs.csv` (144) | 4 alan × 2 rejim × (yok/vae/stl) × 2 mimari × 3 tekrar. |
+| 8 | `python -m src.sli` | `results/effects.csv` + H1–H4 özetleri | Ön-kayıtlı analiz; kural eşiği yarı-kalibre/yarı-dondurulmuş. |
+
+## 3. Gerçek veri yerleşimi
+
+```
+data/real/weather/weather.csv        # Autoformer benchmark paketi
+data/real/traffic/traffic.csv        # Autoformer benchmark paketi
+data/real/electricity/ETTh1.csv      # github.com/zhouhaoyi/ETDataset
+data/real/epias/ptf.csv              # EPİAŞ Şeffaflık, Türkçe format (;)
+```
+EPİAŞ: `Tarih;Saat;PTF (TL/MWh);...` başlıklı ham export olduğu gibi
+bırakılır; parser Türkçe sayı biçimini ve çift timestamp'i kendisi çözer.
+
+## 4. Dizin ve modüller
+
+```
+src/
+  measures.py    Ω_spec (Welch nperseg=1024 SABİT), H_perm (order=4)
+  signals.py     iki-aşamalı kalibrasyonlu üreteç + 3-kanal (H3 için)
+  data.py        kronolojik split, rejim dilimi, pencereleme (sızıntısız)
+  models.py      DLinear, PatchTST-lite [kanal-bağımsız]; iTransformer-lite
+                 [kanal-karıştıran]; TimesNet = planlı genişletme
+  train.py       sabit bütçe: Adam 1e-3, batch 64, 10 epoch, val-seçimli
+  generators.py  bootstrap, vae [O=0]; seasonal(oracle), exog, stl [O=1]
+                 — openness etiketleri ÖN-KAYITLI; ayrıca probe/spectral
+                 fidelity fonksiyonları
+  sli.py         headroom (ordinal, Ω-bandı içi), etki tablosu, karar
+                 kuralı ve naif-kural kıyası
+scripts/         yukarıdaki tablo; hepsi resume'lu
+```
+
+## 5. Metodolojik sabitler (değiştirme!)
+
+- Ω ölçümü `nperseg=1024`'te sabittir; hedefe göre oynatılmaz.
+- Openness etiketleri ve üreteç tasarımları pilot sonrası **donduruldu**
+  (exog-v1 bilinen faz-kırma kusuruyla bilinçli olarak olduğu gibi
+  raporlanır; bkz. makale §3.4 "Pilot disclosure").
+- Karar kuralı eşiği omurganın yarısında kalibre edilir, kalan yarı +
+  gerçek alanlarda dondurulmuş test edilir (`src/sli.py:evaluate_rule`).
+- İki makine/GPU karışımı serbesttir; tekrar tohumları cihazlar-arası
+  nondeterminizmi soğurur (makale §3.7).
+
+## 6. Bilinen bulgu notları (analiz okurken)
+
+- H2 "buharlaşan regularizer" deseni: omurgada VAE'de ve tüm gerçek
+  alanlarda doğrulandı. Bootstrap hiçbir rejimde fayda göstermez.
+- Ön-kayıtlı SLI kuralı (H4) çöktü (≈ "asla augment" doğruluğu); çöküş
+  exog'un O=1 etiketiyle zarar vermesinden. İki keşifsel sadakat metriği
+  de monoton moderatör vermedi (F_probe kapalı-sınıf içinde ters işaret).
+- Weather/VAE/tam-veri hücresindeki +%61 göreli zarar, 0.002'lik taban
+  MSE'sinin ölçek etkisidir; mutlak fark küçüktür.
