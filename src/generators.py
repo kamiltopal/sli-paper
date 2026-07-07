@@ -142,5 +142,71 @@ def _spec_obj(row):
                       n_components=int(row["n_components"]))
 
 
+def gen_stl(Xtr: np.ndarray, cfg, ratio: float = 1.0, seed: int = 0,
+            periods: tuple = (24, 168), **_):
+    """Seasonal-trend generator for REAL domains (open: O=1).
+    Openness source: domain-fixed periodicities (set a priori from the
+    sampling interval, never from outcomes). Structure is preserved
+    exactly; residual variance is replaced by FRESH white noise
+    (matched std) — no residual bootstrap, per the fidelity lesson
+    from the backbone pilot.
+    """
+    from .data import make_windows
+    rng = np.random.default_rng(seed + 40_000)
+    y = Xtr[:, 0].astype(float)
+    T = len(y)
+    # trend: centered moving average at the longest period
+    k = min(max(periods), T // 4) | 1
+    pad = np.pad(y, (k // 2, k // 2), mode="edge")
+    trend = np.convolve(pad, np.ones(k) / k, mode="valid")[:T]
+    detr = y - trend
+    seasonal = np.zeros(T)
+    resid = detr.copy()
+    for P in periods:
+        if T < 2 * P:
+            continue
+        prof = np.array([resid[i::P].mean() for i in range(P)])
+        seasonal += np.tile(prof, T // P + 1)[:T]
+        resid = detr - seasonal
+    synth = trend + seasonal + rng.standard_normal(T) * resid.std()
+    synth = (synth - synth.mean()) / (synth.std() + 1e-8)
+    Xs = Xtr.copy()
+    Xs[:, 0] = synth
+    xi, yi = make_windows(Xs, 0, len(Xs), cfg)
+    n = int(ratio * len(xi))
+    keep = rng.choice(len(xi), size=min(n, len(xi)), replace=False)
+    return xi[keep], yi[keep]
+
+
+def spectral_fidelity(real_windows: np.ndarray,
+                      synth_windows: np.ndarray) -> float:
+    """F ∈ [0,1]: pre-training-computable structural fidelity of a
+    synthetic pool. 1 − total-variation distance between the mean
+    normalized power spectra of real vs synthetic target windows.
+    Uses NO outcome data — measurable before any forecaster training.
+    """
+    def mean_psd(w):
+        W = w - w.mean(axis=1, keepdims=True)
+        psd = np.abs(np.fft.rfft(W, axis=1)) ** 2
+        m = psd.mean(axis=0)
+        return m / m.sum()
+    p, q = mean_psd(real_windows), mean_psd(synth_windows)
+    return float(1.0 - 0.5 * np.abs(p - q).sum())
+
+
 GENERATORS = {"bootstrap": gen_bootstrap, "vae": gen_vae,
-              "seasonal": gen_seasonal, "exog": gen_exog}
+              "seasonal": gen_seasonal, "exog": gen_exog, "stl": gen_stl}
+OPENNESS["stl"] = 1
+
+
+def probe_fidelity(real_x, real_y, syn_x, syn_y, lam: float = 1e-2) -> float:
+    """Phase-sensitive, pre-training fidelity: a closed-form ridge probe
+    (lookback -> horizon, target channel) is fit on the SYNTHETIC pool and
+    evaluated on REAL training windows. Returns a clipped R²-like score.
+    Uses only the training segment and the pool — no outcome data."""
+    A = syn_x[:, :, 0]
+    Ai = np.concatenate([A, np.ones((len(A), 1))], axis=1)
+    W = np.linalg.solve(Ai.T @ Ai + lam * np.eye(Ai.shape[1]), Ai.T @ syn_y)
+    Ar = np.concatenate([real_x[:, :, 0], np.ones((len(real_x), 1))], axis=1)
+    mse = ((Ar @ W - real_y) ** 2).mean()
+    return float(max(0.0, 1.0 - mse / real_y.var()))
