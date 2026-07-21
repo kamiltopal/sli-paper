@@ -151,6 +151,41 @@ def fig4_fidelity_null(eff: pd.DataFrame, fid: pd.DataFrame):
     _save(fig, "fig4_fidelity_null")
 
 
+def fig5_architecture(eff: pd.DataFrame):
+    """Architecture amplification: channel-mixing amplifies injected
+    structure in both directions (correct vs incorrect)."""
+    d = eff.copy()
+    d["aclass"] = np.where(d.arch.isin(["dlinear", "patchtst"]),
+                           "Channel-independent", "Channel-mixing")
+    R = [0.10, 0.25, 1.00]
+    CLS = {"Channel-independent": dict(color="#888888", ls="--", marker="s"),
+           "Channel-mixing": dict(color="#0072B2", ls="-", marker="o")}
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.0), sharex=True)
+    for ax, gen, title in zip(
+            axes, ("seasonal", "exog"),
+            ("Correct structure (structural prior)",
+             "Incorrect structure (exogenous-cond.)")):
+        sub_g = d[d.generator == gen]
+        for cls, st in CLS.items():
+            sub = sub_g[sub_g.aclass == cls]
+            med = sub.groupby("regime")["delta_pct"].median().reindex(R)
+            q1 = sub.groupby("regime")["delta_pct"].quantile(.25).reindex(R)
+            q3 = sub.groupby("regime")["delta_pct"].quantile(.75).reindex(R)
+            ax.plot(R, med, marker=st["marker"], ls=st["ls"],
+                    color=st["color"], label=cls, lw=1.6)
+            ax.fill_between(R, q1, q3, color=st["color"], alpha=0.12)
+        ax.axhline(0, color="k", lw=0.8, ls=":")
+        ax.set_xscale("log"); ax.set_xticks(R)
+        ax.set_xticklabels(["10%", "25%", "100%"])
+        ax.set_title(title, fontsize=9)
+        ax.set_xlabel("Real-data regime")
+    axes[0].set_ylabel("ΔMSE% (median, IQR)")
+    axes[0].legend(fontsize=7, frameon=False)
+    fig.suptitle("Channel-mixing amplifies injected structure — "
+                 "in both directions", fontsize=10)
+    _save(fig, "fig5_architecture")
+
+
 def main():
     eff = pd.read_csv(RES / "effects.csv")
     real = pd.read_csv(RES / "real_runs.csv")
@@ -159,6 +194,7 @@ def main():
     fig2_omega(eff)
     fig3_real(real)
     fig4_fidelity_null(eff, fid)
+    fig5_architecture(eff)
 
 
 if __name__ == "__main__":
