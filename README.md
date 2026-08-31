@@ -1,10 +1,7 @@
-# SLI — Synthetic Learnability Index: Deney Altyapısı (final)
+# SLI — Synthetic Learnability Index
 
-Tek yazarlı makale: *When Does Synthetic Data Help Time-Series Forecasting?
-An Entropy-Conditioned, Information-Routing Account.* Bu repo, makaledeki
-tüm deneylerin üretim–eğitim–analiz hattıdır. Her koşum (seri, rejim,
-üreteç, mimari, tekrar) anahtarıyla CSV'lere eklenir ve **kaldığı yerden
-devam eder** (Ctrl-C güvenli).
+*When Does Synthetic Data Help Time-Series Forecasting?
+An Entropy-Conditioned, Information-Routing Account.* This repository is the production-training-analysis pipeline for all experiments in the article. Each run (serial, regime, generator, architecture, repeat) is added to CSVs with its key and **continues from where it left off** (Ctrl-C safe).
 
 ## 1. Kurulum
 
@@ -16,9 +13,9 @@ pip install einops tqdm                             # Aşama 2+ (GPU)
 python -c "import torch; print(torch.cuda.is_available())"
 ```
 
-## 2. Boru hattı — çalıştırma sırası
+## 2. Pipeline — ordered
 
-| # | Komut | Üretir | Not |
+| # | Comment | Produces | Note |
 |---|---|---|---|
 | 1 | `python -m scripts.validate_backbone` | `data/synthetic/*.npy` (54 seri, (20000,3)), `results/backbone_validation.csv/.png` | Aşama-1 kapısı: kalibrasyon hatası <0.02, Spearman ρ>0.8. GPU gerekmez. |
 | 2 | `python -m scripts.smoke_test` | — | 3 mimarinin uçtan uca 2-epoch testi (<1 dk GPU). |
@@ -29,7 +26,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 | 7 | `python -m scripts.run_real` | `results/real_runs.csv` (144) | 4 alan × 2 rejim × (yok/vae/stl) × 2 mimari × 3 tekrar. |
 | 8 | `python -m src.sli` | `results/effects.csv` + H1–H4 özetleri | Ön-kayıtlı analiz; kural eşiği yarı-kalibre/yarı-dondurulmuş. |
 
-## 3. Gerçek veri yerleşimi
+## 3. Real Data placement
 
 ```
 data/real/weather/weather.csv        # Autoformer benchmark paketi
@@ -40,7 +37,7 @@ data/real/epias/ptf.csv              # EPİAŞ Şeffaflık, Türkçe format (;)
 EPİAŞ: `Tarih;Saat;PTF (TL/MWh);...` başlıklı ham export olduğu gibi
 bırakılır; parser Türkçe sayı biçimini ve çift timestamp'i kendisi çözer.
 
-## 4. Dizin ve modüller
+## 4. Files and modules
 
 ```
 src/
@@ -58,7 +55,7 @@ src/
 scripts/         yukarıdaki tablo; hepsi resume'lu
 ```
 
-## 5. Metodolojik sabitler (değiştirme!)
+## 5. constants
 
 - Ω ölçümü `nperseg=1024`'te sabittir; hedefe göre oynatılmaz.
 - Openness etiketleri ve üreteç tasarımları pilot sonrası **donduruldu**
@@ -69,12 +66,3 @@ scripts/         yukarıdaki tablo; hepsi resume'lu
 - İki makine/GPU karışımı serbesttir; tekrar tohumları cihazlar-arası
   nondeterminizmi soğurur (makale §3.7).
 
-## 6. Bilinen bulgu notları (analiz okurken)
-
-- H2 "buharlaşan regularizer" deseni: omurgada VAE'de ve tüm gerçek
-  alanlarda doğrulandı. Bootstrap hiçbir rejimde fayda göstermez.
-- Ön-kayıtlı SLI kuralı (H4) çöktü (≈ "asla augment" doğruluğu); çöküş
-  exog'un O=1 etiketiyle zarar vermesinden. İki keşifsel sadakat metriği
-  de monoton moderatör vermedi (F_probe kapalı-sınıf içinde ters işaret).
-- Weather/VAE/tam-veri hücresindeki +%61 göreli zarar, 0.002'lik taban
-  MSE'sinin ölçek etkisidir; mutlak fark küçüktür.
