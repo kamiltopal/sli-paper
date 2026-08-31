@@ -3,7 +3,7 @@
 *When Does Synthetic Data Help Time-Series Forecasting?
 An Entropy-Conditioned, Information-Routing Account.* This repository is the production-training-analysis pipeline for all experiments in the article. Each run (serial, regime, generator, architecture, repeat) is added to CSVs with its key and **continues from where it left off** (Ctrl-C safe).
 
-## 1. Kurulum
+## 1. Set up
 
 ```bash
 conda create -n sli python=3.11 -y && conda activate sli
