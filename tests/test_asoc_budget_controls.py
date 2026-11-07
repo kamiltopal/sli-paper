@@ -5,12 +5,13 @@ Run: python -m unittest discover -s tests -p 'test_asoc_budget_controls.py'
 import json
 import math
 import unittest
+from unittest import mock
 
 import numpy as np
 import torch
 from torch import nn
 
-from scripts.asoc_budget_controls import count_steps, fit_condition, only_channels
+from scripts.asoc_budget_controls import count_steps, fit_condition, only_channels, select_device
 
 
 class TestControls(unittest.TestCase):
@@ -18,6 +19,12 @@ class TestControls(unittest.TestCase):
         self.assertEqual(count_steps(101, 101, 64, 10), (20, 40))
         with self.assertRaises(ValueError):
             count_steps(0, 1, 64, 10)
+
+    def test_device_selection_is_gpu_first_and_cpu_fallback_explicit(self):
+        with mock.patch("torch.cuda.is_available", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "CUDA GPU not available"):
+                select_device()
+            self.assertEqual(select_device(allow_cpu=True).type, "cpu")
 
     def test_target_only(self):
         p = (np.ones((5, 6, 3), dtype="float32"), np.zeros((5, 2), dtype="float32"))

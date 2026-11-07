@@ -45,6 +45,29 @@ def seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def select_device(*, allow_cpu: bool = False, gpu_index: int = 0) -> torch.device:
+    """Require CUDA by default; explicit CPU fallback for environments without CUDA.
+
+    The original gen_vae() chooses the active CUDA device when CUDA is
+    available, so we select the device before generating the synthetic pool.
+    """
+    if torch.cuda.is_available():
+        count = torch.cuda.device_count()
+        if not (0 <= gpu_index < count):
+            raise ValueError(f"--gpu-index {gpu_index} is invalid: {count} CUDA device(s) available")
+        torch.cuda.set_device(gpu_index)
+        return torch.device(f"cuda:{gpu_index}")
+    if allow_cpu:
+        if gpu_index != 0:
+            raise ValueError("--gpu-index requires CUDA")
+        return torch.device("cpu")
+    raise RuntimeError(
+        "CUDA GPU not available to this PyTorch environment. "
+        "Install a CUDA-enabled PyTorch build/check GPU drivers; "
+        "or explicitly pass --allow-cpu for a CPU-only smoke test."
+    )
+
+
 def only_channels(pair, mode: str):
     x, y = pair
     return (x[:, :, :1], y) if mode == "target" else (x, y)
@@ -165,7 +188,10 @@ def main() -> None:
     p.add_argument("--vae-epochs", type=int, default=30)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=1e-3)
-    p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--gpu-index", type=int, default=0,
+                   help="CUDA device index; uses GPU 0 by default")
+    p.add_argument("--allow-cpu", action="store_true",
+                   help="Allow explicit CPU fallback when CUDA is unavailable (slow)")
     p.add_argument("--out", type=Path, default=ROOT / "results" / "asoc_revision" / "budget_controls.csv")
     args = p.parse_args()
     if args.epochs <= 0 or args.vae_epochs <= 0 or args.batch_size <= 0 or args.rep < 0 or args.lr <= 0:
@@ -175,6 +201,15 @@ def main() -> None:
         path = ROOT / "data" / "synthetic" / path
     if not path.is_file():
         p.error(f"Missing {path}; run python -m scripts.validate_backbone first")
+    try:
+        device = select_device(allow_cpu=args.allow_cpu, gpu_index=args.gpu_index)
+    except (ValueError, RuntimeError) as exc:
+        p.error(str(exc))
+    gpu_name = torch.cuda.get_device_name(device) if device.type == "cuda" else "none"
+    print(f"DEVICE: {device} | GPU: {gpu_name} | "
+          f"PyTorch: {torch.__version__} | CUDA: {torch.version.cuda or 'not built'}")
+    if device.type != "cuda":
+        print("WARNING: CPU fallback requested; do not compare runtime with GPU runs.")
     pool_seed = _pool_seed_from_path(path) if args.pool_seed is None else args.pool_seed
 
     from src.data import WindowConfig, prepare, chrono_split, apply_regime, standardize
@@ -189,9 +224,13 @@ def main() -> None:
     train_end, _ = chrono_split(len(X))
     train_start = apply_regime(train_end, args.regime, cfg.lookback)
     standardized, _, _ = standardize(X, slice(train_start, train_end))
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     t0 = time.perf_counter()
     synthetic = gen_vae(standardized[train_start:train_end], cfg,
                         ratio=1.0, seed=pool_seed, epochs=args.vae_epochs)
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     generation_seconds = round(time.perf_counter() - t0, 3)
     if len(synthetic[0]) != n_real:
         raise RuntimeError(f"Expected {n_real} VAE windows, got {len(synthetic[0])}")
@@ -222,15 +261,23 @@ def main() -> None:
             print(f"SKIP {name}: existing result")
             continue
         pair, steps, interval = conditions[name]
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
         res = fit_condition(
             arch=args.arch, train_pair=only_channels(pair, args.input_mode),
             val_pair=only_channels(prepared["val"], args.input_mode),
             test_pair=only_channels(prepared["test"], args.input_mode),
             init_seed=args.rep, max_steps=steps, validation_interval=interval,
-            batch_size=args.batch_size, lr=args.lr, device=torch.device(args.device))
+            batch_size=args.batch_size, lr=args.lr, device=device)
         record = dict(zip(KEY_COLS, key))
         record.update(res)
         record.update({
+            "device": str(device), "gpu_name": gpu_name,
+            "pytorch_version": str(torch.__version__),
+            "pytorch_cuda_version": torch.version.cuda or "none",
+            "gpu_peak_memory_mb": (
+                round(torch.cuda.max_memory_allocated(device) / (1024 ** 2), 2)
+                if device.type == "cuda" else 0.0),
             "original_steps": original_steps, "matched_steps": matched_steps,
             "generator_seconds": generation_seconds,
             "vae_aux_alignment": "random_unmatched" if args.input_mode == "all" else "not_applicable",
