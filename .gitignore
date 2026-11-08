@@ -1,4 +1,5 @@
 @"
+.idea/
 data/synthetic/*.npy
 results/*.csv
 results/*.png
