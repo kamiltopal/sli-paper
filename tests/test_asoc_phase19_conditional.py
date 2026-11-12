@@ -37,6 +37,19 @@ class Phase19Tests(unittest.TestCase):
         for mode in m.MODES:
             metrics,(ms,ma)=m.fit(self.real,self.real,self.real,mode,0,2,1,self.dev,batch=4,width=16,heads=4,layers=1)
             self.assertEqual(metrics['optimizer_steps'],2);self.assertEqual(len(ms),16);self.assertAlmostEqual(float(ms.mean()),metrics['test_mse'],places=6);self.assertAlmostEqual(float(ma.mean()),metrics['test_mae'],places=6);self.assertIn(metrics['best_step'],(1,2))
+    def test_resume_nonempty_runs(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); idx=np.arange(16,dtype=np.int64)
+            meta=dict(matched_steps=2,data_sha256='data',raw_sha256='raw')
+            metrics,(ms,ma)=m.fit(self.real,self.real,self.real,'target_only',0,2,1,self.dev,batch=4,width=16,heads=4,layers=1)
+            path=root/'origins/target_only_step_baseline_0.npz'
+            m.atomic_npz(path,origin=idx,mse=ms,mae=ma)
+            row=dict(mode='target_only',arm='step_baseline',rep=0,pool_seed=-1,config_id=m.fingerprint(meta),data_sha256='data',raw_sha256='raw',origin_sha256=m.sha(path),**metrics)
+            m.atomic_csv(pd.DataFrame([row]),m.run_path(root))
+            df=m.read_runs(root,meta,idx,self.real)
+            done=set(zip(df["mode"],df["arm"],df["rep"]))
+            self.assertEqual(done,{('target_only','step_baseline',0)})
+            self.assertEqual(len([k for k in m.expected() if k not in done]),23)
     def test_report(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);df=pd.DataFrame([dict(mode=mode,arm=arm,rep=rep,test_mse=1.+m.ARMS.index(arm)/10,test_mae=.5+m.ARMS.index(arm)/20) for mode,arm,rep in m.expected()]);m.report(root,df)

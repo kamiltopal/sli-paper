@@ -166,7 +166,7 @@ def read_runs(root,meta,idx,real):
     path=run_path(root);df=pd.read_csv(path) if path.exists() else pd.DataFrame();cid=fingerprint(meta)
     if df.empty:return df
     need(not df.duplicated(['mode','arm','rep']).any() and set(df.config_id)=={cid},'Run key/config mismatch; use new output directory')
-    need(set(zip(df.mode,df.arm,df.rep)).issubset(set(expected())),'Unknown run key')
+    need(set(zip(df["mode"],df["arm"],df["rep"])).issubset(set(expected())),'Unknown run key')
     for r in df.itertuples():
         need(r.optimizer_steps==meta['matched_steps'] and r.data_sha256==meta['data_sha256'] and r.raw_sha256==meta['raw_sha256'],'Budget/data mismatch')
         need(r.pool_seed==(0 if r.arm.endswith('vae') else -1),'Pool seed mismatch')
@@ -214,7 +214,7 @@ def main():
         for m in MODES:
             met,_=fit(real,real,real,m,0,2,1,dev,batch=4);print('SMOKE fit',m,met['test_mse'])
         print('SMOKE PASS');return
-    d,meta,idx,gate=preflight(resolve(a.data),resolve(a.raw),resolve(a.reference));root=resolve(a.outdir);cid=fingerprint(meta);real=d['train'];df=read_runs(root,meta,idx,real);done=set(zip(df.mode,df.arm,df.rep)) if len(df) else set();pending=[x for x in expected() if x not in done]
+    d,meta,idx,gate=preflight(resolve(a.data),resolve(a.raw),resolve(a.reference));root=resolve(a.outdir);cid=fingerprint(meta);real=d['train'];df=read_runs(root,meta,idx,real);done=set(zip(df["mode"],df["arm"],df["rep"])) if len(df) else set();pending=[x for x in expected() if x not in done]
     print('EPİAŞ preflight PASS',json.dumps(gate['split'],ensure_ascii=False));print('config',cid,'pending fits',len(pending),'matched_steps',meta['matched_steps']);print('Raw SHA',meta['raw_sha256'],'prepared SHA',meta['data_sha256'])
     if a.dry_run:return
     if a.report:report(root,df);return
