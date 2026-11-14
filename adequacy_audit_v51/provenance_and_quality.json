@@ -1,0 +1,149 @@
+{
+  "weather": {
+    "sha256": "bf5014da5724795b91ce862de5245018568064b86daa5ad49b207ecb76b81a03",
+    "data_length": 52696,
+    "train_end": 36887,
+    "test_start": 42156,
+    "test_windows": 10517,
+    "regimes": [
+      {
+        "regime": 0.1,
+        "train_start": 33198,
+        "train_sentinel_count": 0,
+        "train_windows": 3570
+      }
+    ],
+    "sentinel_diagnostics": {
+      "sentinel_count": 50,
+      "sentinel_indices": [
+        7244,
+        7245,
+        7246,
+        7247,
+        7248,
+        7249,
+        7250,
+        7251,
+        7252,
+        7253,
+        7254,
+        7255,
+        7256,
+        7257,
+        7258,
+        7259,
+        7260,
+        7261,
+        7262,
+        7263,
+        7264,
+        7265,
+        7266,
+        7267,
+        7268,
+        7269,
+        7270,
+        7271,
+        7272,
+        7273,
+        7274,
+        7275,
+        7276,
+        7277,
+        31758,
+        31759,
+        31760,
+        31761,
+        31762,
+        31763,
+        31764,
+        31765,
+        31766,
+        31767,
+        31768,
+        31769,
+        31770,
+        31771,
+        31772,
+        31773
+      ],
+      "validation_count": 0,
+      "test_count": 0,
+      "train_sd_original": 383.95709796381755,
+      "train_sd_causal_ffill_diagnostic": 18.196060645343614,
+      "omega_full_original": 0.3739527154978227,
+      "omega_full_causal_ffill_diagnostic": 0.5929031311236618,
+      "warning": "Causal forward-fill is a sensitivity diagnostic only; not a replacement dataset or retrained experiment."
+    },
+    "raw_check": {
+      "sha256": "34ee981d07313e51da2a50bb600072c8ae4a69cb4b0651f4cb93a069d7a2ba63",
+      "raw_target_equal": true,
+      "duplicate_dates": 1,
+      "null_dates": 0,
+      "non_10min_intervals": 2
+    }
+  },
+  "electricity": {
+    "sha256": "c5fcd66ef85a284a7227fb4373a76e9c6d7469eed5f8ed6412598c8d981927ab",
+    "data_length": 17420,
+    "train_end": 12194,
+    "test_start": 13935,
+    "test_windows": 3462,
+    "regimes": [
+      {
+        "regime": 0.1,
+        "train_start": 10974,
+        "train_sentinel_count": 0,
+        "train_windows": 1101
+      },
+      {
+        "regime": 0.25,
+        "train_start": 9145,
+        "train_sentinel_count": 0,
+        "train_windows": 2930
+      },
+      {
+        "regime": 1.0,
+        "train_start": 0,
+        "train_sentinel_count": 0,
+        "train_windows": 12075
+      }
+    ]
+  },
+  "traffic": {
+    "sha256": "7b31f4925ee97956fa3cd0ca190015b43fb1a9e7193282ea9da89b56286aa576",
+    "data_length": 17544,
+    "train_end": 12280,
+    "test_start": 14035,
+    "test_windows": 3486,
+    "regimes": [
+      {
+        "regime": 0.1,
+        "train_start": 11052,
+        "train_sentinel_count": 0,
+        "train_windows": 1109
+      },
+      {
+        "regime": 1.0,
+        "train_start": 0,
+        "train_sentinel_count": 0,
+        "train_windows": 12161
+      }
+    ]
+  },
+  "epias": {
+    "sha256": "95fcd634c07847d8fbdccc2804d96aa5c3aa1b9b2eec74bd0079997893145d69",
+    "data_length": 39552,
+    "train_end": 27686,
+    "test_start": 31641,
+    "test_windows": 7888,
+    "regimes": [
+      {
+        "regime": 0.1,
+        "train_start": 24917,
+        "train_sentinel_count": 0,
+        "train_windows": 2650
+      }
+    ]
+  }
+}
