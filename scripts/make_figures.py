@@ -1,7 +1,15 @@
-"""Publication figures (Results section). Reproducible from results/*.csv.
+"""Publication figures (final, post-review terminology).
+
+Reads results/effects.csv (produced by `python -m src.sli`),
+results/real_runs.csv and results/fidelity.csv.
+Writes results/fig1..fig5 as .png (300 dpi) and .pdf.
 
 Run:  python -m scripts.make_figures
-Writes results/fig1..fig4 as .png (300 dpi) and .pdf.
+
+NOTE: fig5 (and the architecture panels generally) require the
+FULL-GRID effects.csv (1,944 cells, three architectures). If your
+effects.csv has 648 cells it was built from the iTransformer-only
+augmented.csv; rebuild it from the merged augmented.csv first.
 """
 from __future__ import annotations
 
@@ -19,13 +27,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 RES = ROOT / "results"
 
-# colorblind-safe, consistent generator identity across all figures
+# Colorblind-safe palette; generator identity consistent across figures.
+# Labels use the manuscript's final terminology:
+#   structure-informed (uses information beyond the training sample)
+#   data-derived       (learned only from the training sample)
 GEN_STYLE = {
-    "seasonal": dict(color="#0072B2", label="Structural prior (open)"),
-    "stl": dict(color="#0072B2", label="Seasonal-trend STL (open)"),
-    "exog": dict(color="#D55E00", label="Exogenous-cond. (open, low-fid.)"),
-    "vae": dict(color="#009E73", label="Window-VAE (closed)"),
-    "bootstrap": dict(color="#CC79A7", label="Block-bootstrap (closed)"),
+    "seasonal": dict(color="#0072B2", label="Structural prior (oracle)"),
+    "stl": dict(color="#0072B2", label="Seasonal-trend (STL-style)"),
+    "exog": dict(color="#D55E00", label="Exogenous-conditioned"),
+    "vae": dict(color="#009E73", label="Window-VAE"),
+    "bootstrap": dict(color="#CC79A7", label="Block-bootstrap"),
 }
 REGIMES = [0.10, 0.25, 1.00]
 plt.rcParams.update({"font.size": 9, "axes.spines.top": False,
@@ -40,8 +51,7 @@ def _save(fig, name):
 
 
 def fig1_vanishing(eff: pd.DataFrame):
-    """Headline: ΔMSE% vs data regime per generator (backbone, iTransformer).
-    Median with IQR band over 216 cells/generator."""
+    """Regime profiles per generator (median, IQR band)."""
     fig, ax = plt.subplots(figsize=(4.6, 3.2))
     for gen in ("seasonal", "vae", "bootstrap", "exog"):
         d = eff[eff.generator == gen]
@@ -49,7 +59,8 @@ def fig1_vanishing(eff: pd.DataFrame):
         q1 = d.groupby("regime")["delta_pct"].quantile(.25).reindex(REGIMES)
         q3 = d.groupby("regime")["delta_pct"].quantile(.75).reindex(REGIMES)
         st = GEN_STYLE[gen]
-        ax.plot(REGIMES, med, "o-", color=st["color"], label=st["label"], lw=1.6)
+        ax.plot(REGIMES, med, "o-", color=st["color"], label=st["label"],
+                lw=1.6)
         ax.fill_between(REGIMES, q1, q3, color=st["color"], alpha=0.15)
     ax.axhline(0, color="k", lw=0.8, ls="--")
     ax.set_xscale("log")
@@ -57,13 +68,13 @@ def fig1_vanishing(eff: pd.DataFrame):
     ax.set_xticklabels(["10%", "25%", "100%"])
     ax.set_xlabel("Real-data regime (fraction of training span)")
     ax.set_ylabel("ΔMSE% (augmented vs. baseline)")
-    ax.set_title("Augmentation effect vanishes or reverses with data abundance")
+    ax.set_title("Augmentation effects across data-availability regimes")
     ax.legend(fontsize=7, frameon=False)
     _save(fig, "fig1_vanishing_benefit")
 
 
 def fig2_omega(eff: pd.DataFrame):
-    """Ω-band × generator interaction (backbone)."""
+    """Predictability-band interaction."""
     fig, ax = plt.subplots(figsize=(4.6, 3.2))
     bands = sorted(eff.target_omega.unique())
     width = 0.2
@@ -81,13 +92,13 @@ def fig2_omega(eff: pd.DataFrame):
     ax.set_xticks(np.arange(len(bands)))
     ax.set_xticklabels([f"Ω = {b}" for b in bands])
     ax.set_ylabel("ΔMSE% (median, IQR)")
-    ax.set_title("Effect by intrinsic predictability band")
+    ax.set_title("Augmentation effects by predictability band")
     ax.legend(fontsize=7, frameon=False)
     _save(fig, "fig2_omega_interaction")
 
 
 def fig3_real(real: pd.DataFrame):
-    """Real domains: scarce vs full, STL and VAE; EPİAŞ highlighted."""
+    """Real domains: scarce vs full data; EPİAŞ shaded."""
     b = (real[real.generator == "none"]
          .groupby(["domain", "regime", "arch"])["test_mse"].median()
          .rename("mse_base"))
@@ -117,19 +128,18 @@ def fig3_real(real: pd.DataFrame):
         ax.axvspan(2.55, 3.45, color="0.92", zorder=0)  # EPİAŞ shading
     axes[0].set_ylabel("ΔMSE% (median)")
     axes[0].legend(fontsize=7, frameon=False)
-    axes[1].set_ylim(-20, 15)
+    axes[1].set_ylim(-20, 60)
     axes[1].annotate("all cells > 0", xy=(3, 8), fontsize=7, ha="center",
                      style="italic")
-    fig.suptitle("Real domains: benefits under scarcity, harm at abundance",
-                 fontsize=10)
+    fig.suptitle("Real-domain augmentation effects across data-availability "
+                 "regimes", fontsize=10)
     _save(fig, "fig3_real_domains")
 
 
 def fig4_fidelity_null(eff: pd.DataFrame, fid: pd.DataFrame):
-    """Honest negative: F_probe does not gate benefit; wrong sign in
-    closed class."""
-    m = eff.merge(fid, on=["file", "regime", "generator"],
-                  suffixes=("", "_f"))
+    """Exploratory null: similarity diagnostics vs realized effect."""
+    m = eff.merge(fid.drop(columns=["openness"], errors="ignore"),
+                  on=["file", "regime", "generator"])
     fig, ax = plt.subplots(figsize=(4.6, 3.2))
     for gen in ("seasonal", "vae", "bootstrap", "exog"):
         d = m[m.generator == gen]
@@ -137,13 +147,12 @@ def fig4_fidelity_null(eff: pd.DataFrame, fid: pd.DataFrame):
         ax.scatter(d["f_probe"], d["delta_pct"], s=8, alpha=0.45,
                    color=st["color"], label=st["label"], edgecolors="none")
     ax.axhline(0, color="k", lw=0.8, ls="--")
-    ax.set_xlabel("Pre-training probe fidelity  F_probe")
+    ax.set_xlabel("Forecasting-probe score")
     ax.set_ylabel("ΔMSE%")
-    ax.set_title("Fidelity does not gate benefit (exploratory, null)")
-    rho_closed = (m[m.openness == 0][["delta_pct", "f_probe"]]
-                  .corr(method="spearman").iloc[0, 1])
-    ax.annotate(f"closed class: Spearman ρ = +{rho_closed:.2f}\n"
-                "(opposite of the fidelity hypothesis)",
+    ax.set_title("Exploratory similarity diagnostics versus realized effect")
+    rho_dd = (m[m.openness == 0][["delta_pct", "f_probe"]]
+              .corr(method="spearman").iloc[0, 1])
+    ax.annotate(f"data-derived class: Spearman ρ = +{rho_dd:.2f}",
                 xy=(0.02, 0.96), xycoords="axes fraction", va="top",
                 fontsize=7, style="italic")
     ax.set_ylim(-40, 80)
@@ -152,37 +161,34 @@ def fig4_fidelity_null(eff: pd.DataFrame, fid: pd.DataFrame):
 
 
 def fig5_architecture(eff: pd.DataFrame):
-    """Architecture amplification: channel-mixing amplifies injected
-    structure in both directions (correct vs incorrect)."""
+    """Architecture sensitivity to injected structure (both directions)."""
     d = eff.copy()
     d["aclass"] = np.where(d.arch.isin(["dlinear", "patchtst"]),
                            "Channel-independent", "Channel-mixing")
-    R = [0.10, 0.25, 1.00]
     CLS = {"Channel-independent": dict(color="#888888", ls="--", marker="s"),
            "Channel-mixing": dict(color="#0072B2", ls="-", marker="o")}
     fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.0), sharex=True)
     for ax, gen, title in zip(
             axes, ("seasonal", "exog"),
-            ("Correct structure (structural prior)",
-             "Incorrect structure (exogenous-cond.)")):
+            ("Oracle structural prior", "Exogenous-conditioned")):
         sub_g = d[d.generator == gen]
         for cls, st in CLS.items():
             sub = sub_g[sub_g.aclass == cls]
-            med = sub.groupby("regime")["delta_pct"].median().reindex(R)
-            q1 = sub.groupby("regime")["delta_pct"].quantile(.25).reindex(R)
-            q3 = sub.groupby("regime")["delta_pct"].quantile(.75).reindex(R)
-            ax.plot(R, med, marker=st["marker"], ls=st["ls"],
+            med = sub.groupby("regime")["delta_pct"].median().reindex(REGIMES)
+            q1 = sub.groupby("regime")["delta_pct"].quantile(.25).reindex(REGIMES)
+            q3 = sub.groupby("regime")["delta_pct"].quantile(.75).reindex(REGIMES)
+            ax.plot(REGIMES, med, marker=st["marker"], ls=st["ls"],
                     color=st["color"], label=cls, lw=1.6)
-            ax.fill_between(R, q1, q3, color=st["color"], alpha=0.12)
+            ax.fill_between(REGIMES, q1, q3, color=st["color"], alpha=0.12)
         ax.axhline(0, color="k", lw=0.8, ls=":")
-        ax.set_xscale("log"); ax.set_xticks(R)
+        ax.set_xscale("log")
+        ax.set_xticks(REGIMES)
         ax.set_xticklabels(["10%", "25%", "100%"])
         ax.set_title(title, fontsize=9)
         ax.set_xlabel("Real-data regime")
     axes[0].set_ylabel("ΔMSE% (median, IQR)")
     axes[0].legend(fontsize=7, frameon=False)
-    fig.suptitle("Channel-mixing amplifies injected structure — "
-                 "in both directions", fontsize=10)
+    fig.suptitle("Augmentation effects by model configuration", fontsize=10)
     _save(fig, "fig5_architecture")
 
 
@@ -190,6 +196,12 @@ def main():
     eff = pd.read_csv(RES / "effects.csv")
     real = pd.read_csv(RES / "real_runs.csv")
     fid = pd.read_csv(RES / "fidelity.csv")
+    n_arch = eff["arch"].nunique()
+    if n_arch < 3:
+        print(f"WARNING: effects.csv contains {n_arch} architecture(s); "
+              "fig5 and architecture panels need the full 3-architecture "
+              "grid. Rebuild effects.csv from the merged augmented.csv "
+              "via `python -m src.sli`.")
     fig1_vanishing(eff)
     fig2_omega(eff)
     fig3_real(real)
